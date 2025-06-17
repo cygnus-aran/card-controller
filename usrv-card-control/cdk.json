@@ -1,0 +1,33 @@
+{
+  "app": "npx ts-node --prefer-ts-exts Stack.ts",
+  "watch": {
+    "include": [
+      "**"
+    ],
+    "exclude": [
+      "README.md",
+      "cdk*.json",
+      "**/*.d.ts",
+      "**/*.js",
+      "tsconfig.json",
+      "package*.json",
+      "yarn.lock",
+      "node_modules",
+      "test"
+    ]
+  },
+  "context": {
+    "config": {
+      "pipeline": {
+        "template": "usrv-cdk-secuential",
+        "args": {
+          "runtime": "golang1.22",
+          "regions": [
+            "us-east-1",
+            "us-west-2"
+          ]
+        }
+      }
+    }
+  }
+}

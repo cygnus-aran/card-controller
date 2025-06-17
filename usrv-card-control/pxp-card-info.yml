@@ -1,0 +1,414 @@
+openapi: 3.0.3
+info:
+  title: Card Info Delivery API
+  description: |
+    ## Service Overview
+    This service allows a PCI-certified entity to retrieve card data associated with a previously processed
+    card-present transaction, using a unique identifier provided by the merchant. Sensitive data (PAN, expiration date)
+    is returned in an encrypted object.
+
+    ## Requirements
+    - The identifier must be unique per transaction (e.g., `externalReferenceId`).
+    - The response includes a Base64-encoded encrypted object, not plain text card data.
+    - The PCI-certified entity must register its RSA public key with Kushki beforehand.
+    - The resource will be available for 180 days after the transaction is completed.
+    - Maximum processing time: 3 seconds.
+
+    ## Encryption Algorithm
+    - Algorithm: RSA
+    - Key length: 2048-bit
+    - Key format: PEM (X.509)
+    - Encrypted payload includes PAN and expiration month/year.
+
+    ## Security
+    - This service additionally requires a unique `Private-Merchant-Id` header.
+
+  version: 1.0.0
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+
+servers:
+  - url: https://api.example.com/v1
+    description: Production server
+  - url: https://staging-api.example.com/v1
+    description: Staging server
+
+paths:
+  /analytics/v1/card-info/{externalReferenceId}:
+    get:
+      tags:
+        - Transactions
+      summary: Returns card an transaction information based on a given external ID
+      description: Returns a payment transaction using an external reference ID
+      operationId: processTransaction
+      parameters:
+        - name: Private-Merchant-Id
+          in: header
+          required: true
+          description: Unique identifier for the merchant
+          schema:
+            type: string
+            example: "MERCHANT_12345"
+        - name: externalReferenceId
+          in: path
+          required: true
+          description: Unique identifier for the transaction
+          schema:
+            type: string
+            example: "550e8400-e29b-41d4-a716-446655440000"
+      responses:
+        '200':
+          description: Transaction processed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TransactionResponse'
+              examples:
+                successful_transaction:
+                  summary: Successful transaction
+                  value:
+                    card:
+                      encPan: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJwYW4iOiIqKioqKioqKioqKioqMTIzNCJ9"
+                      encDate: "dGhpc0lzQW5FbmNyeXB0ZWREYXRlU3RyaW5n"
+                    externalReferenceId: "550e8400-e29b-41d4-a716-446655440000"
+                    transactionReference: "6ba7b810-9dad-11d1-80b4-00c04fd430c8"
+                    cardBrand: "VISA"
+                    terminalId: "TERM_001"
+                    subMerchantCode: "SUB_MERCHANT_001"
+                    idAffiliation: "AFF_123456"
+                    merchantId: "MERCHANT_12345"
+                    transactionDate: 1749661979000
+        '400':
+          description: Bad request - Invalid input data or Invalid private-merchant-id
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                missing_external_reference:
+                  summary: Missing external reference ID
+                  value:
+                    message: "ID de comercio o credencial no válido"
+                    code: "K004"
+
+        '401':
+          description: Unauthorized - Missing Private-Merchant-Id
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                unauthorized:
+                  summary: Unauthorized access
+                  value:
+                    message: "Unauthorized"
+        '403':
+          description: Forbidden - Different URL than service provided
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                unauthorized:
+                  summary: Unauthorized access
+                  value:
+                    message: "Missing Authentication Token"
+        '404':
+          description: Transaction not found - External reference ID does not exist
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                transaction_not_found:
+                  summary: Transaction not found
+                  value:
+                    message: "Resource not found"
+                    code: "K004"
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                server_error:
+                  summary: Server error
+                  value:
+                    message: "Ha ocurrido un error inesperado"
+                    code: "K002"
+
+  /webhook:
+    post:
+      tags:
+        - Webhooks
+      summary: Transaction data webhook notification
+      description: |
+        Webhook endpoint that receives transaction data notifications. This endpoint is hosted by the customer
+        and called by our service to deliver transaction information after processing.
+        
+        To consult the fallback policies of this webhook, go to the following documentation:
+        
+        **https://docs.kushki.com/cl/en/notifications/overview#webhooks-retry-policy**
+        
+        Authentication Headers can be checked in the following documentation:
+        
+        **https://docs.kushki.com/cl/en/notifications/overview#authentication**
+        
+        **Note:** This is an outbound webhook - our service makes POST requests to customer-provided URLs.
+        
+        **Note:** The resulting URL will be determined by the customer, the presented layout is just referential.
+
+      operationId: receiveWebhook
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WebhookPayload'
+            examples:
+              webhook_notification:
+                summary: Webhook notification payload
+                value:
+                  card:
+                    encPan: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJwYW4iOiIqKioqKioqKioqKioqMTIzNCJ9"
+                    encDate: "dGhpc0lzQW5FbmNyeXB0ZWREYXRlU3RyaW5n"
+                  externalReferenceId: "550e8400-e29b-41d4-a716-446655440000"
+                  transactionReference: "6ba7b810-9dad-11d1-80b4-00c04fd430c8"
+                  cardBrand: "VISA"
+                  terminalId: "TERM_001"
+                  subMerchantCode: "SUB_MERCHANT_001"
+                  idAffiliation: "AFF_123456"
+                  merchantId: "MERCHANT_12345"
+                  transactionDate: 1749661979000
+      responses:
+        '200':
+          description: Webhook received successfully (Customer dependant. Schema not determined by Kushki)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WebhookResponse'
+              examples:
+                success_response:
+                  summary: Successful webhook acknowledgment
+                  value:
+                    status: "received"
+                    message: "Webhook processed successfully"
+                    timestamp: "2023-06-09T10:30:00Z"
+#        '400':
+#          description: Bad request - Invalid webhook payload
+#          content:
+#            application/json:
+#              schema:
+#                $ref: '#/components/schemas/WebhookResponse'
+#              examples:
+#                error_response:
+#                  summary: Webhook processing error
+#                  value:
+#                    status: "error"
+#                    message: "Invalid payload format"
+#                    timestamp: "2023-06-09T10:30:00Z"
+#        '500':
+#          description: Internal server error on customer side
+#          content:
+#            application/json:
+#              schema:
+#                $ref: '#/components/schemas/WebhookResponse'
+#              examples:
+#                server_error_response:
+#                  summary: Customer server error
+#                  value:
+#                    status: "error"
+#                    message: "Internal processing error"
+#                    timestamp: "2023-06-09T10:30:00Z"
+
+components:
+  schemas:
+    TransactionRequest:
+      type: object
+      required:
+        - externalReferenceId
+      properties:
+        externalReferenceId:
+          type: string
+          format: uuid
+          description: External reference identifier for tracking the transaction (UUID format)
+          example: "550e8400-e29b-41d4-a716-446655440000"
+      additionalProperties: false
+
+    WebhookPayload:
+      type: object
+      description: Webhook payload containing transaction data (identical to TransactionResponse)
+      required:
+        - card
+        - externalReferenceId
+        - transactionReference
+        - cardBrand
+        - terminalId
+        - subMerchantCode
+        - idAffiliation
+        - merchantId
+        - transactionDate
+      properties:
+        card:
+          $ref: '#/components/schemas/CardInfo'
+        externalReferenceId:
+          type: string
+          format: uuid
+          description: External reference identifier that was provided in the request (UUID format)
+          example: "550e8400-e29b-41d4-a716-446655440000"
+        transactionReference:
+          type: string
+          format: uuid
+          description: Unique transaction reference generated by the system (UUID format)
+          example: "6ba7b810-9dad-11d1-80b4-00c04fd430c8"
+        cardBrand:
+          type: string
+          description: Brand of the card used in the transaction
+          example: "VISA"
+        terminalId:
+          type: string
+          description: Identifier of the terminal where the transaction was processed
+          example: "TERM_001"
+        subMerchantCode:
+          type: string
+          description: Code identifying the sub-merchant
+          example: "SUB_MERCHANT_001"
+        idAffiliation:
+          type: string
+          description: Affiliation identifier
+          example: "AFF_123456"
+        merchantId:
+          type: string
+          description: Merchant identifier
+          example: "MERCHANT_12345"
+        transactionDate:
+          type: number
+          description: Date of original transaction
+          example: 1749661979000
+      additionalProperties: false
+
+    WebhookResponse:
+      type: object
+      description: Generic response format for webhook acknowledgment
+      required:
+        - status
+        - message
+        - timestamp
+      properties:
+        status:
+          type: string
+          description: Status of webhook processing
+          enum:
+            - received
+            - error
+          example: "received"
+        message:
+          type: string
+          description: Human-readable message about webhook processing
+          example: "Webhook processed successfully"
+        timestamp:
+          type: string
+          format: date-time
+          description: ISO 8601 timestamp of when the webhook was processed
+          example: "2023-06-09T10:30:00Z"
+        requestId:
+          type: string
+          description: Optional request identifier for tracking
+          example: "req_123456789"
+      additionalProperties: true
+
+    TransactionResponse:
+      type: object
+      required:
+        - card
+        - externalReferenceId
+        - transactionReference
+        - cardBrand
+        - terminalId
+        - subMerchantCode
+        - idAffiliation
+        - merchantId
+        - transactionDate
+      properties:
+        card:
+          $ref: '#/components/schemas/CardInfo'
+        externalReferenceId:
+          type: string
+          format: uuid
+          description: External reference identifier that was provided in the request (UUID format)
+          example: "550e8400-e29b-41d4-a716-446655440000"
+        transactionReference:
+          type: string
+          format: uuid
+          description: Unique transaction reference generated by the system (UUID format)
+          example: "6ba7b810-9dad-11d1-80b4-00c04fd430c8"
+        cardBrand:
+          type: string
+          description: Brand of the card used in the transaction
+          example: "VISA"
+        terminalId:
+          type: string
+          description: Identifier of the terminal where the transaction was processed
+          example: "TERM_001"
+        subMerchantCode:
+          type: string
+          description: Code identifying the sub-merchant
+          example: "SUB_MERCHANT_001"
+        idAffiliation:
+          type: string
+          description: Affiliation identifier
+          example: "AFF_123456"
+        merchantId:
+          type: string
+          description: Merchant identifier
+          example: "MERCHANT_12345"
+        transactionDate:
+          type: number
+          description: Date of original transaction
+          example: 1749661979000
+      additionalProperties: false
+
+    CardInfo:
+      type: object
+      required:
+        - encPan
+        - encDate
+      properties:
+        encPan:
+          type: string
+          description: Encrypted Primary Account Number (PAN) of the card
+          example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+        encDate:
+          type: string
+          description: Encrypted card expiration date
+          example: "dGhpc0lzQW5FbmNyeXB0ZWREYXRlU3RyaW5n"
+      additionalProperties: false
+
+    ErrorResponse:
+      type: object
+      required:
+        - error
+        - message
+        - code
+      properties:
+        error:
+          type: string
+          description: Error type or category
+          example: "Bad Request"
+        message:
+          type: string
+          description: Detailed error message
+          example: "externalReferenceId is required"
+        code:
+          type: integer
+          description: HTTP status code
+          example: 400
+      additionalProperties: false
+
+tags:
+  - name: Transactions
+    description: Payment transaction operations
+  - name: Webhooks
+    description: Outbound webhook notifications for transaction data delivery

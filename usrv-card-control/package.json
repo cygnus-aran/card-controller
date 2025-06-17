@@ -1,0 +1,40 @@
+{
+  "name": "@kuhski/usrv-card-control",
+  "version": "1.0.0",
+  "description": "Card Control microservice",
+  "scripts": {
+    "test:unit": "go test -count=1 ./service",
+    "test:coverage": "make coverage",
+    "lint:check": "fgt golint",
+    "lint:format": "go fmt",
+    "prepare": "husky install",
+    "package": "",
+    "deploy": "serverless deploy",
+    "validate": "make validate",
+    "lint-md": "remark -f .",
+    "synth": "cdk synth -q -c name=usrv-card-control"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git@bitbucket.org:kushki/usrv-card-control.git"
+  },
+  "author": "Kushki <dev@kushkipagos.com>",
+  "devDependencies": {
+    "@kushki/cdk": "1.69.0",
+    "@types/node": "20.4.2",
+    "aws-cdk-lib": "2.115.0",
+    "aws-sdk": "2.954.0",
+    "husky": "7.0.0",
+    "remark-cli": "10.0.0",
+    "remark-preset-lint-recommended": "6.1.1",
+    "serverless": "2.72.4",
+    "serverless-deployment-bucket": "1.5.1",
+    "serverless-domain-manager": "4.2.3",
+    "serverless-plugin-canary-deployments": "0.6.0",
+    "serverless-prune-plugin": "1.4.1",
+    "serverless-tag-api-gateway": "1.0.0",
+    "serverless-tag-cloud-watch-logs": "1.0.0",
+    "ts-node": "10.9.1",
+    "typescript": "5.1.6"
+  }
+}
