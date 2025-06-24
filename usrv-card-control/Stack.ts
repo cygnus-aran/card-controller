@@ -16,6 +16,7 @@ import {IResourceService} from "@kushki/cdk/lib/lib/repository/IResourceService"
 import {SQSQueueResource} from "@kushki/cdk/lib/lib/repository/ResourceProps";
 import {AccountEnvEnum} from "@kushki/cdk/lib/common/infraestructure/AccountEnvEnum";
 
+
 const STACK: KushkiStack = new KushkiStack();
 // Constants
 const CODE_PATH: string = "./my-artifacts";
@@ -128,6 +129,51 @@ const VPC_PCI_SUBNETS: IVirtualPrivateCloud =
         }
         : {};
 
+const DYNAMO_CARD_INFO = STACK.setResource({
+    props: {
+        partitionKey: { name: "externalReferenceId", type: AttributeType.STRING },
+        globalSecondaryIndex: [
+            {
+                indexName: "merchantId-index",
+                partitionKey: { name: "merchantId", type: AttributeType.STRING },
+                sortKey: { name: "createdAt", type: AttributeType.NUMBER }
+            },
+            {
+                indexName: "expiresAt-index",
+                partitionKey: { name: "expiresAt", type: AttributeType.NUMBER }
+            }
+        ],
+        pointInTimeRecovery: true,
+        stream: StreamViewType.NEW_AND_OLD_IMAGES,
+        tableName: "cardInfo",
+        timeToLiveAttribute: "expiresAt"  // Automatic cleanup after 180 days
+    },
+    type: ResourceEnum.DynamoDB,
+});
+
+const DEAD_LETTER_CARD_INFO_QUEUE: IResourceService<SQSQueueResource> = STACK.setResource<SQSQueueResource>({
+    type: ResourceEnum.SQSQueue,
+    props: {
+        deliveryDelay: Duration.seconds(0),
+        queueName: "cardInfoProcessingDeadLetterQueue",
+        visibilityTimeout: Duration.seconds(300),
+        retentionPeriod: Duration.seconds(1800), // 30 minutes
+    },
+})
+
+const CARD_INFO_PROCESSING_QUEUE: IResourceService<SQSQueueResource> = STACK.setResource<SQSQueueResource>({
+    type: ResourceEnum.SQSQueue,
+    props: {
+        deadLetterQueue: {
+            maxReceiveCount: 3,
+            queue: DEAD_LETTER_CARD_INFO_QUEUE,
+        },
+        queueName: "cardInfoProcessingQueue",
+        visibilityTimeout: Duration.seconds(300), // 5 minutes
+        retentionPeriod: Duration.seconds(2800)   // 46+ minutes
+    },
+})
+
 // Environment
 STACK.setEnvironment({
     DYNAMO_BLOCKED_CARD: STACK.utils.getEnvResource(
@@ -136,6 +182,10 @@ STACK.setEnvironment({
     ),
     DYNAMO_CARD_RETRY: STACK.utils.getEnvResource(
         DYNAMO_CARD_RETRY,
+        AttributeTypeEnum.NAME
+    ),
+    DYNAMO_CARD_INFO_TABLE: STACK.utils.getEnvResource(
+        DYNAMO_CARD_INFO,
         AttributeTypeEnum.NAME
     ),
     ROLLBAR_TOKEN: STACK.utils.getEnvDynamodb("ROLLBAR_TOKEN"),
@@ -254,6 +304,48 @@ STACK.setPattern(PatternEnum.SINGLE_LAMBDA)
         resource: DYNAMO_BLOCKED_CARD
     },
 ])
+
+STACK.setPattern(PatternEnum.SQS_LAMBDA)
+    .setEvents([
+        {
+            type: EventsEnum.QueueEvent,
+            props: {
+                source: CARD_INFO_PROCESSING_QUEUE,
+                batchSize: 1  // Process one message at a time for better error handling
+            }
+        }
+    ])
+    .setLambda({
+        ...LAMBDA_PROPS(
+            "cardInfoProcessor",
+            "card_info_processor_handler"
+        ),
+        timeout: Duration.seconds(60), // Longer timeout for encryption operations
+        memorySize: 512  // More memory for crypto operations
+    })
+    .setAccess([
+        {
+            actions: [DynamoActions.PutItem, DynamoActions.GetItem],
+            resource: DYNAMO_CARD_INFO
+        }
+    ]);
+
+STACK.setPattern(PatternEnum.SQS_LAMBDA)
+    .setEvents([
+        {
+            type: EventsEnum.QueueEvent,
+            props: {
+                source: DEAD_LETTER_CARD_INFO_QUEUE,
+                batchSize: 1
+            }
+        }
+    ])
+    .setLambda({
+        ...LAMBDA_PROPS(
+            "cardInfoProcessorDLQ",
+            "card_info_processor_dlq_handler"
+        )
+    });
 
 // Build
 STACK.build();
