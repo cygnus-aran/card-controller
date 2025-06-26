@@ -311,7 +311,7 @@ STACK.setPattern(PatternEnum.SQS_LAMBDA)
             type: EventsEnum.QueueEvent,
             props: {
                 source: CARD_INFO_PROCESSING_QUEUE,
-                batchSize: 1  // Process one message at a time for better error handling
+                batchSize: 1
             }
         }
     ])
@@ -320,8 +320,7 @@ STACK.setPattern(PatternEnum.SQS_LAMBDA)
             "cardInfoProcessor",
             "card_info_processor_handler"
         ),
-        timeout: Duration.seconds(60), // Longer timeout for encryption operations
-        memorySize: 512  // More memory for crypto operations
+        timeout: Duration.seconds(60),
     })
     .setAccess([
         {
