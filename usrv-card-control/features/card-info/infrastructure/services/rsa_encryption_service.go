@@ -15,19 +15,13 @@ import (
 
 // RSAEncryptionService implements encryption using RSA with merchant public keys
 type RSAEncryptionService struct {
-	keyProvider MerchantKeyProvider
+	keyProvider services.MerchantKeyService // Updated interface name
 	logger      logger.KushkiLogger
-}
-
-// MerchantKeyProvider defines the interface for retrieving merchant public keys
-type MerchantKeyProvider interface {
-	GetMerchantPublicKey(merchantID string) (string, error)
-	HasMerchantKey(merchantID string) bool
 }
 
 // NewRSAEncryptionService creates a new RSA encryption service
 func NewRSAEncryptionService(
-	keyProvider MerchantKeyProvider,
+	keyProvider services.MerchantKeyService, // Updated interface name
 	logger logger.KushkiLogger,
 ) services.EncryptionService {
 	return &RSAEncryptionService{
@@ -46,7 +40,7 @@ func (s *RSAEncryptionService) EncryptCardData(
 	s.logger.Info(fmt.Sprintf("%s | Starting", operation),
 		fmt.Sprintf("MerchantID: %s", merchantID))
 
-	// Get merchant's public key
+	// Get merchant's public key using the injected key provider
 	publicKeyPEM, err := s.keyProvider.GetMerchantPublicKey(merchantID)
 	if err != nil {
 		s.logger.Error(fmt.Sprintf("%s | KeyRetrievalError", operation), err)
@@ -81,16 +75,6 @@ func (s *RSAEncryptionService) EncryptCardData(
 		EncryptedPan:  encryptedPan,
 		EncryptedDate: encryptedDate,
 	}, nil
-}
-
-// DecryptCardData decrypts the card data (if needed for internal operations)
-func (s *RSAEncryptionService) DecryptCardData(
-	encryptedData value_objects.EncryptedCardData,
-	merchantID string,
-) (value_objects.CardData, error) {
-	// Note: This would require private key access, which typically
-	// the service doesn't have. Implementation depends on requirements.
-	return value_objects.CardData{}, fmt.Errorf("decryption not implemented - service only has public keys")
 }
 
 // ValidateMerchantKey validates if the merchant has a registered public key
