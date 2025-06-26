@@ -2,6 +2,7 @@ package repositories
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 
@@ -9,6 +10,7 @@ import (
 	"bitbucket.org/kushki/usrv-card-control/features/card-info/domain/repositories"
 	"bitbucket.org/kushki/usrv-go-core/gateway/dynamo"
 	"bitbucket.org/kushki/usrv-go-core/gateway/dynamo/builder"
+	dynamoerror "bitbucket.org/kushki/usrv-go-core/gateway/dynamo/errors"
 	"bitbucket.org/kushki/usrv-go-core/logger"
 	"github.com/aws/aws-sdk-go-v2/feature/dynamodb/expression"
 )
@@ -47,9 +49,9 @@ func (r *DynamoCardInfoRepository) Save(ctx context.Context, cardInfo *entities.
 	r.logger.Info(fmt.Sprintf("%s | Starting", operation),
 		fmt.Sprintf("ExternalReferenceID: %s", cardInfo.ExternalReferenceID))
 
-	builder := r.buildPutItemBuilder(cardInfo)
+	putBuilder := r.buildPutItemBuilder(cardInfo)
 
-	if err := r.dynamoGateway.PutItem(ctx, builder); err != nil {
+	if err := r.dynamoGateway.PutItem(ctx, putBuilder); err != nil {
 		r.logger.Error(fmt.Sprintf("%s | Error", operation), err)
 		return fmt.Errorf("failed to save card info to DynamoDB: %w", err)
 	}
@@ -70,15 +72,15 @@ func (r *DynamoCardInfoRepository) FindByExternalReferenceID(
 	r.logger.Info(fmt.Sprintf("%s | Starting", operation),
 		fmt.Sprintf("ExternalReferenceID: %s", externalReferenceID))
 
-	builder := r.buildGetItemBuilder(externalReferenceID)
+	getBuilder := r.buildGetItemBuilder(externalReferenceID)
 
 	var cardInfo entities.StoredCardInfo
-	if err := r.dynamoGateway.GetItem(ctx, builder, &cardInfo); err != nil {
-		//if dynamoerror.IsItemNotFound(err) {
-		//	r.logger.Info(fmt.Sprintf("%s | NotFound", operation),
-		//		fmt.Sprintf("ExternalReferenceID: %s", externalReferenceID))
-		//	return nil, fmt.Errorf("card info not found for externalReferenceID: %s", externalReferenceID)
-		//}
+	if err := r.dynamoGateway.GetItem(ctx, getBuilder, &cardInfo); err != nil {
+		if errors.Is(err, dynamoerror.ErrItemNotFound) {
+			r.logger.Info(fmt.Sprintf("%s | NotFound", operation),
+				fmt.Sprintf("ExternalReferenceID: %s", externalReferenceID))
+			return nil, fmt.Errorf("card info not found for externalReferenceID: %s", externalReferenceID)
+		}
 		r.logger.Error(fmt.Sprintf("%s | Error", operation), err)
 		return nil, fmt.Errorf("failed to get card info from DynamoDB: %w", err)
 	}
@@ -123,9 +125,9 @@ func (r *DynamoCardInfoRepository) Delete(ctx context.Context, externalReference
 	r.logger.Info(fmt.Sprintf("%s | Starting", operation),
 		fmt.Sprintf("ExternalReferenceID: %s", externalReferenceID))
 
-	builder := r.buildDeleteItemBuilder(externalReferenceID)
+	deleteBuilder := r.buildDeleteItemBuilder(externalReferenceID)
 
-	if err := r.dynamoGateway.DeleteItem(ctx, builder); err != nil {
+	if err := r.dynamoGateway.DeleteItem(ctx, deleteBuilder); err != nil {
 		r.logger.Error(fmt.Sprintf("%s | Error", operation), err)
 		return fmt.Errorf("failed to delete card info from DynamoDB: %w", err)
 	}
@@ -146,10 +148,10 @@ func (r *DynamoCardInfoRepository) FindExpiredRecords(
 	r.logger.Info(fmt.Sprintf("%s | Starting", operation),
 		fmt.Sprintf("CurrentTime: %d", currentTime))
 
-	builder := r.buildScanExpiredBuilder(currentTime)
+	scanBuilder := r.buildScanExpiredBuilder(currentTime)
 
 	var expiredRecords []*entities.StoredCardInfo
-	if err := r.dynamoGateway.ScanItems(ctx, builder, &expiredRecords); err != nil {
+	if err := r.dynamoGateway.ScanItems(ctx, scanBuilder, &expiredRecords); err != nil {
 		r.logger.Error(fmt.Sprintf("%s | Error", operation), err)
 		return nil, fmt.Errorf("failed to scan expired records: %w", err)
 	}

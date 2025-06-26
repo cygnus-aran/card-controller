@@ -34,13 +34,12 @@ func NewDependencyContainer(ctx context.Context) (*DependencyContainer, error) {
 	// Create repository
 	cardInfoRepo := repositories.NewDynamoCardInfoRepository(dynamoGtw, kskLogger)
 
-	// Create services - these would need concrete implementations
-	// For now, we'll create placeholder implementations
-	//keyProvider := &PlaceholderKeyProvider{}
-	//encryptionService := services.NewRSAEncryptionService(keyProvider, kskLogger)
+	// Create concrete service implementations
+	keyProvider := services.NewMerchantKeyService(kskLogger)
+	encryptionService := services.NewRSAEncryptionService(keyProvider, kskLogger)
 
-	merchantAccessProvider := &PlaceholderMerchantAccessProvider{}
-	credentialProvider := &PlaceholderCredentialProvider{}
+	merchantAccessProvider := services.NewMerchantAccessService(kskLogger)
+	credentialProvider := services.NewCredentialService(kskLogger)
 	validationService := services.NewCardInfoValidationService(
 		merchantAccessProvider,
 		credentialProvider,
@@ -59,32 +58,4 @@ func NewDependencyContainer(ctx context.Context) (*DependencyContainer, error) {
 		ProcessCardInfoUseCase: processCardInfoUseCase,
 		Logger:                 kskLogger,
 	}, nil
-}
-
-// Placeholder implementations - these would be replaced with real implementations
-
-type PlaceholderKeyProvider struct{}
-
-func (p *PlaceholderKeyProvider) GetMerchantPublicKey(merchantID string) (string, error) {
-	// TODO: Implement actual key retrieval from database/service
-	return "", fmt.Errorf("key provider not implemented")
-}
-
-type PlaceholderMerchantAccessProvider struct{}
-
-func (p *PlaceholderMerchantAccessProvider) HasCardInfoAccess(merchantID string) bool {
-	// TODO: Implement actual access check
-	return false
-}
-
-func (p *PlaceholderMerchantAccessProvider) IsActiveMerchant(merchantID string) bool {
-	// TODO: Implement actual merchant status check
-	return false
-}
-
-type PlaceholderCredentialProvider struct{}
-
-func (p *PlaceholderCredentialProvider) ValidatePrivateCredential(privateCredentialID, merchantID string) bool {
-	// TODO: Implement actual credential validation
-	return false
 }
